@@ -376,11 +376,6 @@ function drawPlayer(){
   const img = skin[player.pose];
   const dw = player.drawW, dh = player.drawH;
 
-  ctx.fillStyle = "rgba(0,0,0,.35)";
-  ctx.beginPath();
-  ctx.ellipse(player.x, H-50, 50, 14, 0, 0, Math.PI*2);
-  ctx.fill();
-
   ctx.save();
   ctx.translate(player.x, 0);
   if(player.facing < 0) ctx.scale(-1, 1);
@@ -473,3 +468,4 @@ function loop(){
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
