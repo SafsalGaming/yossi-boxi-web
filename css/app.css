@@ -68,6 +68,21 @@ img{max-width:100%;display:block}
   color:var(--text);
 }
 
+/* Coins pill: orange background, white text */
+.pill.coins{
+  background:rgba(249,115,22,.18);
+  border-color:rgba(249,115,22,.38);
+}
+
+/* Stable numbers (no resizing jumps) */
+.num{
+  display:inline-block;
+  width:96px;              /* score width */
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+.num.coinsNum{ width:64px; }
+
 .small{color:var(--text);opacity:.82;font-size:13px;line-height:1.35}
 
 .input{
@@ -77,6 +92,7 @@ img{max-width:100%;display:block}
   border:1px solid rgba(255,255,255,.12);
   background:rgba(0,0,0,.22);
   outline:none;
+  color:var(--text);
 }
 .input:focus{border-color:rgba(59,130,246,.55)}
 
@@ -120,10 +136,10 @@ img{max-width:100%;display:block}
 
 .hr{height:1px;background:rgba(255,255,255,.10);margin:14px 0}
 
-/* Menu layout helpers */
+/* Menu: make character panel narrower, buttons panel wider */
 .menuLayout{
   display:grid;
-  grid-template-columns:1.15fr .85fr;
+  grid-template-columns:.85fr 1.15fr;
   gap:14px;
 }
 @media (max-width: 860px){ .menuLayout{grid-template-columns:1fr} }
@@ -133,7 +149,11 @@ img{max-width:100%;display:block}
   display:flex;
   flex-direction:column;
   justify-content:center; /* vertical center */
-  gap:12px;
+  gap:14px;
+}
+.menuButtons .btn{
+  padding:16px 14px;       /* bigger buttons */
+  font-size:16px;
 }
 
 .heroBox{
@@ -179,6 +199,7 @@ img{max-width:100%;display:block}
   font-size:12px;
   border:1px solid rgba(255,255,255,.14);
   background:rgba(255,255,255,.06);
+  color:var(--text);
 }
 .badge.locked{
   background:rgba(239,68,68,.10);
@@ -204,13 +225,39 @@ thead th{
   padding:12px;
   text-align:left;
   font-weight:1000;
+  color:var(--text);
 }
 tbody td{
   border-bottom:1px solid rgba(255,255,255,.06);
   padding:12px;
   text-align:left;
   vertical-align:middle;
+  color:var(--text);
 }
 thead th:nth-child(1), tbody td:nth-child(1){width:72px}
 thead th:nth-child(3), tbody td:nth-child(3){width:160px}
 tr.me{background:rgba(250,204,21,.16)}
+
+/* Global loader overlay */
+#loader{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--bg);
+}
+#loader .loaderBox{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  align-items:center;
+}
+.spinner{
+  width:22px;height:22px;border-radius:999px;
+  border:2px solid rgba(255,255,255,.20);
+  border-top-color:rgba(255,255,255,.85);
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
