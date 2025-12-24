@@ -1,6 +1,6 @@
 import { initAuthPersistence, login, register } from "./firebaseAuth.js";
 import { apiProfileGet, apiProfilePatch } from "./api.js";
-import { setSession, setCachedProfile, ensureGuest, saveGuestProfile } from "./state.js";
+import { setSession, setCachedProfile, ensureGuest } from "./state.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -16,9 +16,9 @@ function validUsername(s){
   return /^[a-zA-Z0-9_]+$/.test(t);
 }
 
-function msg(el, text, ok=false){
-  el.textContent = text || "";
-  el.style.color = ok ? "var(--ok)" : "var(--danger)";
+function msg(el, t, ok=false){
+  el.textContent = t || "";
+  el.style.color = ok ? "var(--green)" : "var(--red)";
 }
 
 await initAuthPersistence();
@@ -27,54 +27,50 @@ $("btnLogin").addEventListener("click", async () => {
   const email = $("loginEmail").value.trim();
   const pass  = $("loginPass").value;
 
-  if(!validEmail(email)) return msg($("loginMsg"), "אימייל לא תקין");
-  if(!validPassword(pass)) return msg($("loginMsg"), "סיסמה חייבת לפחות 8 תווים");
-
-  msg($("loginMsg"), "מתחבר...", true);
+  if(!validEmail(email)) return msg($("loginMsg"), "Enter a valid email.");
+  if(!validPassword(pass)) return msg($("loginMsg"), "Password must be at least 8 characters.");
 
   try{
+    msg($("loginMsg"), "Signing in...", true);
     await login(email, pass);
-    const profile = await apiProfileGet();
 
+    const profile = await apiProfileGet();
     setSession({ mode:"auth", uid: profile.uid });
     setCachedProfile(profile);
 
     location.href = "menu.html";
   }catch(e){
-    msg($("loginMsg"), e.message || "נכשל");
+    msg($("loginMsg"), e.message || "Login failed.");
   }
 });
 
 $("btnRegister").addEventListener("click", async () => {
   const username = $("regUser").value.trim();
-  const email = $("regEmail").value.trim();
-  const pass  = $("regPass").value;
+  const email    = $("regEmail").value.trim();
+  const pass     = $("regPass").value;
 
-  if(!validUsername(username)) return msg($("regMsg"), "שם משתמש: 3-16 תווים, רק אותיות/מספרים/_");
-  if(!validEmail(email)) return msg($("regMsg"), "אימייל לא תקין");
-  if(!validPassword(pass)) return msg($("regMsg"), "סיסמה חייבת לפחות 8 תווים");
-
-  msg($("regMsg"), "נרשם...", true);
+  if(!validUsername(username)) return msg($("regMsg"), "Username: 3-16, letters/numbers/_ only.");
+  if(!validEmail(email)) return msg($("regMsg"), "Enter a valid email.");
+  if(!validPassword(pass)) return msg($("regMsg"), "Password must be at least 8 characters.");
 
   try{
+    msg($("regMsg"), "Creating account...", true);
     await register(email, pass);
 
-    // יוצר פרופיל ב-Firestore דרך Netlify function
-    const profile = await apiProfileGet();
-    const patched = await apiProfilePatch({ username });
+    const base = await apiProfileGet();
+    const updated = await apiProfilePatch({ username });
 
-    setSession({ mode:"auth", uid: patched.uid });
-    setCachedProfile(patched);
+    setSession({ mode:"auth", uid: updated.uid || base.uid });
+    setCachedProfile(updated);
 
     location.href = "menu.html";
   }catch(e){
-    msg($("regMsg"), e.message || "נכשל");
+    msg($("regMsg"), e.message || "Register failed.");
   }
 });
 
 $("btnGuest").addEventListener("click", () => {
   const g = ensureGuest();
-  saveGuestProfile(g);
   setSession({ mode:"guest", uid: g.uid });
   location.href = "menu.html";
 });
