@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="he" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Yossi Boxi Web - Game</title>
+  <title>YOSSI BOXI - Game</title>
   <link rel="stylesheet" href="css/app.css" />
   <style>
     #wrap{position:relative;border-radius:16px;overflow:hidden;box-shadow:var(--shadow)}
@@ -23,65 +23,57 @@
       justify-content:center;
       pointer-events:none;
     }
-    .hearts img{
-      width:38px;height:38px;
-      image-rendering:pixelated;
-      filter:drop-shadow(0 6px 10px rgba(0,0,0,.6));
-    }
+    .hearts img{width:34px;height:34px;image-rendering:pixelated;filter:drop-shadow(0 8px 14px rgba(0,0,0,.55))}
 
     .overlay{
-      position:absolute;inset:0;
-      display:none;
-      align-items:center;
-      justify-content:center;
-      background:rgba(0,0,0,.55);
-      pointer-events:auto;
+      position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+      background:rgba(0,0,0,.55);backdrop-filter:blur(10px);
     }
-    .overlay .box{
+    .box{
       width:min(520px, 92vw);
-      background:rgba(0,0,0,.35);
+      background:rgba(0,0,0,.32);
       border:1px solid var(--line);
       border-radius:16px;
       padding:16px;
       text-align:center;
-      backdrop-filter:blur(10px);
     }
   </style>
 </head>
 <body>
-<div class="wrap">
-  <div id="wrap">
-    <canvas id="game" width="960" height="540"></canvas>
+  <div class="wrap">
+    <div id="wrap">
+      <canvas id="game" width="960" height="540"></canvas>
 
-    <div class="hud">
-      <div class="hudTop">
-        <div class="row" style="gap:10px">
-          <div class="pill">ניקוד: <span id="score">0</span></div>
-          <div class="pill">סקין: <span id="skinName">...</span></div>
+      <div class="hud">
+        <div class="hudTop">
+          <div class="row" style="gap:10px">
+            <div class="pill">Score: <span id="score">0</span></div>
+            <div class="pill">Coins: <span id="coins">0</span></div>
+            <div class="pill">Skin: <span id="skinName">...</span></div>
+          </div>
+          <div class="row" style="gap:10px">
+            <button class="btn ghost" id="pauseBtn" style="pointer-events:auto">Pause (Space)</button>
+            <button class="btn danger" id="backBtn" style="pointer-events:auto">Exit</button>
+          </div>
         </div>
-        <div class="row" style="gap:10px">
-          <div class="pill btn" id="pauseBtn" style="pointer-events:auto">פאוז Space</div>
-          <div class="pill btn" id="backBtn" style="pointer-events:auto">חזרה</div>
-        </div>
+
+        <div class="hearts" id="hearts"></div>
       </div>
 
-      <div class="hearts" id="hearts"></div>
-    </div>
-
-    <div class="overlay" id="over">
-      <div class="box">
-        <div class="pill" style="display:inline-block">Game Over</div>
-        <div style="height:10px"></div>
-        <div class="small">ניקוד: <span id="finalScore">0</span></div>
-        <div class="small">מטבעות שהרווחת: <span id="finalCoins">0</span></div>
-        <div style="height:14px"></div>
-        <button class="btn primary" id="toMenu">חזרה לתפריט</button>
+      <div class="overlay" id="over">
+        <div class="box">
+          <div class="pill" style="justify-content:center">Game Over</div>
+          <div style="height:10px"></div>
+          <div class="small">Score: <span id="finalScore">0</span></div>
+          <div class="small">Coins earned: <span id="finalCoins">0</span></div>
+          <div style="height:14px"></div>
+          <button class="btn primary" id="toMenu">Back to Menu</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<script src="js/firebase-config.js"></script>
-<script type="module" src="js/game.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script type="module" src="js/game.js"></script>
 </body>
 </html>
