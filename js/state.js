@@ -28,8 +28,12 @@ export function isGuest(){
 
 export function requireSessionOrGuest(){
   const s = getSession();
-  if(!s || !s.mode) location.href = "index.html";
+  if(!s || !s.mode){
+    location.href = "index.html";
+    throw new Error("NO_SESSION_REDIRECT");
+  }
 }
+
 
 export function setCachedProfile(p){
   localStorage.setItem(K_CACHE, JSON.stringify({ ...p, t: Date.now() }));
@@ -70,3 +74,4 @@ export function getPendingRun(){
 export function clearPendingRun(){
   localStorage.removeItem(K_PENDING);
 }
+
