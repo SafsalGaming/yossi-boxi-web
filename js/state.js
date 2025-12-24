@@ -3,6 +3,7 @@ import { DEFAULT_PROFILE } from "./constants.js";
 const K_SESSION = "yossi_session_v1";
 const K_GUEST   = "yossi_guest_profile_v1";
 const K_CACHE   = "yossi_cached_profile_v1";
+const K_PENDING = "yossi_pending_run_v1";
 
 function safeParse(s){
   try{ return JSON.parse(s); }catch{ return null; }
@@ -35,9 +36,7 @@ export function setCachedProfile(p){
 }
 
 export function getCachedProfile(){
-  const x = safeParse(localStorage.getItem(K_CACHE) || "");
-  if(!x) return null;
-  return x;
+  return safeParse(localStorage.getItem(K_CACHE) || "") || null;
 }
 
 export function ensureGuest(){
@@ -59,4 +58,15 @@ export function saveGuestProfile(p){
 
 export function getGuestProfile(){
   return ensureGuest();
+}
+
+/* pending run (save on exit) */
+export function setPendingRun(run){
+  localStorage.setItem(K_PENDING, JSON.stringify({ ...run, t: Date.now() }));
+}
+export function getPendingRun(){
+  return safeParse(localStorage.getItem(K_PENDING) || "") || null;
+}
+export function clearPendingRun(){
+  localStorage.removeItem(K_PENDING);
 }
