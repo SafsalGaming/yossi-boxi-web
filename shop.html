@@ -1,0 +1,332 @@
+
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Yossi Boxi Web - Auto Lane Punch</title>
+<style>
+  :root{--bg:#0e0f12;--ui:#e5e7eb;--glass:rgba(255,255,255,.08)}
+  html,body{height:100%;margin:0;background:var(--bg);font-family:system-ui,Segoe UI,Roboto,Arial}
+  body{display:flex;align-items:center;justify-content:center}
+  #wrap{position:relative;border-radius:16px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+  /* רקע חלק ללא פסים */
+  canvas{display:block;background:#0d1117}
+  .hud{position:absolute;inset:0;color:var(--ui);pointer-events:none;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+  .row{position:absolute;left:14px;right:14px;top:10px;display:flex;gap:10px;justify-content:space-between}
+  .pill{backdrop-filter:blur(6px);background:var(--glass);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:8px 14px;font-weight:700;font-size:14px}
+  .btn{pointer-events:auto;cursor:pointer;transition:.15s transform}
+  .btn:active{transform:translateY(1px)}
+  .help{position:absolute;right:14px;bottom:12px;max-width:66ch;pointer-events:none}
+  
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="960" height="540"></canvas>
+  <div class="hud">
+    <div class="row">
+      <div class="pill">ניקוד: <span id="score">0</span></div>
+      <div class="pill">חיים: <span id="hp">3</span></div>
+      <div class="pill">סקין: <span id="skinName">yossi_classic</span></div>
+      <div class="pill btn" id="reset">אתחל R</div>
+    </div>
+    <div class="help pill">
+      שמאלה או ימינה = מכה. הגובה נבחר אוטומטית לפי האויב הכי קרוב בצד. רווח = פאוז. 1-4 מחליף סקין.
+    </div>
+  </div>
+</div>
+
+<script>
+/* ======================== CONFIG - תשחק פה ========================
+   אחוזים הם ביחס לגובה הקנבס, מלמטה למעלה. לדוגמה 30 אומר 30% מהתחתית. */
+const SETTINGS = {
+  lanesPct: { bottom: 20, middle: 43, top: 55 },  // גובהי הנתיבים באחוזים מהתחתית
+  player: { sizePx: 300, baseHeightPct: 18 },      // גודל השחקן ומיקום מהתחתית
+  enemy:  { sizePx: 70 },                          // גודל האויבים (ריבוע)
+  hitRangePx: 220,                                  // טווח פגיעה אופקי של השחקן
+  timing: { idleCycleSec: 0.7, attackHoldMs: 200 }  // מהירות אנימציית עמידה/קראוץ' וזמן תצוגת מכה
+};
+/* ================================================================= */
+
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const ui = {
+  score: document.getElementById('score'),
+  hp: document.getElementById('hp'),
+  skinName: document.getElementById('skinName'),
+  reset: document.getElementById('reset')
+};
+const W=cvs.width, H=cvs.height;
+
+/* נכסים */
+function loadImg(src){ const i=new Image(); i.src=src; i.loaded=false; i.failed=false; i.onload=()=>i.loaded=true; i.onerror=()=>i.failed=true; return i; }
+const enemyImgs = [1,2,3].map(n=>loadImg(`assets/enemy${n}.png`));
+const SKINS = ['yossi_classic','yossi_bossi','yossi_dossi','yoyo_yossi'];
+let skinIdx = 0;
+function loadSkin(name){
+  return {
+    name,
+    stand:      loadImg(`assets/skins/${name}/stand.png`),
+    crouch:     loadImg(`assets/skins/${name}/crouch.png`),
+    top_hit:    loadImg(`assets/skins/${name}/top_hit.png`),
+    middle_hit: loadImg(`assets/skins/${name}/middle_hit.png`),
+    bottom_hit: loadImg(`assets/skins/${name}/bottom_hit.png`)
+  };
+}
+let skin = loadSkin(SKINS[skinIdx]);
+ui.skinName.textContent = skin.name;
+
+/* סאונד - ללא קבצים חיצוניים */
+let ACtx = null;
+function ctxAudio(){ if(!ACtx) ACtx = new (window.AudioContext||window.webkitAudioContext)(); return ACtx; }
+function playEnemyHitPlayer(){
+  // פרץ רעש קצר מסונן - punch קליל
+  const ctxA = ctxAudio();
+  const dur = 0.08; const rate = ctxA.sampleRate; const frames = Math.floor(rate*dur);
+  const buf = ctxA.createBuffer(1, frames, rate);
+  const data = buf.getChannelData(0);
+  for(let i=0;i<frames;i++){ data[i] = (Math.random()*2-1) * (1 - i/frames); }
+  const src = ctxA.createBufferSource(); src.buffer = buf;
+  const filt = ctxA.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 700;
+  const gain = ctxA.createGain(); gain.gain.value = 0.6;
+  src.connect(filt); filt.connect(gain); gain.connect(ctxA.destination);
+  src.start();
+}
+
+/* המרות מהמגדיר למיקומים פיקסליים */
+let lanes = [];
+function pctFromBottom(pct){ return H * (1 - pct/100); }
+function applyLayout(){
+  lanes = [
+    { name:'low',  y: pctFromBottom(SETTINGS.lanesPct.bottom) },
+    { name:'mid',  y: pctFromBottom(SETTINGS.lanesPct.middle) },
+    { name:'high', y: pctFromBottom(SETTINGS.lanesPct.top) }
+  ];
+  player.baseY = pctFromBottom(SETTINGS.player.baseHeightPct);
+  player.drawW = player.drawH = SETTINGS.player.sizePx;
+  ENEMY_SIZE = SETTINGS.enemy.sizePx;
+  HIT_RANGE = SETTINGS.hitRangePx;
+  player.atkDur = SETTINGS.timing.attackHoldMs;
+}
+
+/* שחקן - גדול וקצת נמוך יותר */
+const player = {
+  x: W/2,
+  baseY: 0,          // יוגדר ב-applyLayout
+  drawW: 0, drawH: 0,
+  facing: 1,
+  lastAtk: 0, atkDur: 110,
+  pose: 'stand',
+  idleT: 0
+};
+let ENEMY_SIZE = 70; // יוחלף ב-applyLayout
+let HIT_RANGE = 220; // יוחלף ב-applyLayout
+
+/* מצב משחק */
+let enemies = [];
+let score=0, hp=3, alive=true, paused=false;
+let hurtUntil = 0; // תזמון פילטר אדום על השחקן
+let spawnTimer=0, spawnRate=800, speedBase=250;
+let tPrev=performance.now();
+
+applyLayout();
+addEventListener('resize', applyLayout);
+
+/* קלט */
+const keys={};
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(k===' '){ e.preventDefault(); paused=!paused; return; }
+  keys[k]=true;
+  if(k==='r') return reset();
+  if(k==='1'||k==='2'||k==='3'||k==='4'){
+    skinIdx=parseInt(k)-1; skin=loadSkin(SKINS[skinIdx]); ui.skinName.textContent=skin.name;
+  }
+  if(e.key==='ArrowLeft'||k==='a')  punch(-1);
+  if(e.key==='ArrowRight'||k==='d')  punch( 1);
+});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+ui.reset.addEventListener('click', reset);
+
+function reset(){
+  enemies.length=0; score=0; hp=3; alive=true; paused=false;
+  spawnRate=800; speedBase=250;
+  player.lastAtk=0; player.pose='stand'; player.facing=1; player.idleT=0;
+}
+
+/* ספאון אויבים */
+function spawn(){
+  const side = Math.random()<0.5 ? -1 : 1;
+  const laneIdx = Math.floor(Math.random()*3);
+  const x = side<0 ? -ENEMY_SIZE : W+ENEMY_SIZE;
+  const v = speedBase + Math.random()*100;
+  const spriteIdx = Math.floor(Math.random()*3);
+  enemies.push({ side, lane: laneIdx, x, y: lanes[laneIdx].y, w: ENEMY_SIZE, h: ENEMY_SIZE, speed: v, sprite: spriteIdx, dead:false, removeAt:0, cause:'' });
+}
+
+/* מכה - בחירת גובה אוטומטית לפי האויב הכי קרוב בצד */
+function update(dt){
+  const now = performance.now();
+  const attacking = (now - player.lastAtk) <= player.atkDur;
+
+  // idle loop only when not attacking
+  if(!attacking){
+    if(player.pose !== 'stand' && player.pose !== 'crouch'){
+      // just finished an attack - snap to stand and restart idle
+      player.pose = 'stand';
+      player.idleT = 0;
+    } else {
+      player.idleT += dt;
+      const cycle = Math.max(0.1, SETTINGS.timing.idleCycleSec);
+      const phase = (player.idleT % cycle) / cycle;
+      player.pose = phase < 0.5 ? 'stand' : 'crouch';
+    }
+  }
+
+  // spawn
+  spawnTimer += dt * 1000;
+  if (spawnTimer >= spawnRate){ spawnTimer = 0; spawn(); }
+
+  const center = player.x;
+
+  // move enemies
+  for (const e of enemies){
+    if (e.dead){
+      if (e.cause === 'byPlayer'){
+        // fly-away shrink animation only for enemies hit by player
+        e.y -= 240 * dt;
+        e.x += e.side * 140 * dt;
+        e.w *= 0.985; e.h *= 0.985;
+      } else if (e.cause === 'hitPlayer'){
+        // do nothing - disappears shortly (see cleanup)
+        if (!e.removeAt) e.removeAt = now + 90; // safety
+      }
+      continue;
+    }
+
+    const dir = e.x < center ? 1 : -1;
+    e.x += dir * e.speed * dt;
+
+    // enemy reached player -> damage & vanish (no fly-away)
+    if (Math.abs(e.x - center) < 26){
+      e.dead = true;
+      e.cause = 'hitPlayer';
+      e.removeAt = now + 90;         // vanish quickly
+      playEnemyHitPlayer();          // hit sound
+      hurtUntil = now + 220;         // red flash window
+      hp--; if (hp <= 0) alive = false;
+    }
+  }
+
+  // cleanup
+  enemies = enemies.filter(e => {
+    if (e.cause === 'hitPlayer' && e.removeAt && now >= e.removeAt) return false;
+    if (e.cause === 'byPlayer'   && (e.y < -120 || e.x < -220 || e.x > W + 220)) return false;
+    return true;
+  });
+}
+
+function punch(dir){
+  if (!alive || paused) return;
+  const now = performance.now();
+  if (now - player.lastAtk < player.atkDur) return;   // cooldown = attack frame
+
+  player.lastAtk = now;
+  player.facing = dir;
+
+  // pick closest enemy on that side
+  const center = player.x;
+  let target = null, best = 1e9;
+  for (const e of enemies){
+    if (e.dead) continue;
+    const correctSide = dir < 0 ? e.x < center : e.x > center;
+    if (!correctSide) continue;
+    const d = Math.abs(e.x - center);
+    if (d < best){ best = d; target = e; }
+  }
+
+  // choose pose by target lane (default mid)
+  const laneWanted = target ? target.lane : 1;
+  player.pose = laneWanted === 2 ? 'top_hit' : laneWanted === 1 ? 'middle_hit' : 'bottom_hit';
+
+  // anti-race: only revert to stand if same attack is still current
+  const stamp = player.lastAtk;
+  setTimeout(() => {
+    if (!paused && player.lastAtk === stamp){
+      player.pose = 'stand';
+      player.idleT = 0; // restart idle from stand facing last direction
+    }
+  }, player.atkDur);
+
+  // resolve hit
+  if (target && Math.abs(target.x - center) <= HIT_RANGE){
+    target.dead = true;
+    target.cause = 'byPlayer';
+    score += 10;
+    if (spawnRate > 420) spawnRate -= 10;
+    speedBase += 1;
+  }
+}
+
+
+/* ציור */
+function draw(){
+  ctx.clearRect(0,0,W,H); // רקע חלק
+  drawPlayer();
+  drawEnemies();
+  if(paused) drawPause();
+  ui.score.textContent=score; ui.hp.textContent=hp;
+}
+
+function drawPlayer(){
+  const img = skin[player.pose]; const dw=player.drawW, dh=player.drawH;
+  // צל
+  ctx.fillStyle='rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(player.x, H-50, 50, 14, 0, 0, Math.PI*2); ctx.fill();
+  ctx.save(); ctx.translate(player.x, 0); if(player.facing<0) ctx.scale(-1,1);
+  // ספרייט
+  if(img && img.loaded && !img.failed) ctx.drawImage(img, -dw/2, player.baseY - dh, dw, dh);
+  else { ctx.fillStyle='#2563eb'; ctx.fillRect(-dw/2, player.baseY-dh, dw, dh); }
+  // פילטר אדום כשנפגע
+  if(performance.now() < hurtUntil){
+    const prev = ctx.globalCompositeOperation; const prevA = ctx.globalAlpha;
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.globalAlpha = 0.5; ctx.fillStyle = '#ff0000';
+    ctx.fillRect(-dw/2, player.baseY - dh, dw, dh);
+    ctx.globalAlpha = prevA; ctx.globalCompositeOperation = prev;
+  }
+  ctx.restore();
+}
+
+function drawEnemies(){
+  for(const e of enemies){
+    const img = enemyImgs[e.sprite], dw=e.w, dh=e.h;
+    ctx.save();
+    if(e.side<0){ ctx.translate(e.x,0); ctx.scale(-1,1); if(img && img.loaded && !img.failed) ctx.drawImage(img, -dw/2, e.y - dh, dw, dh); else { ctx.fillStyle='#9ca3af'; ctx.fillRect(-dw/2, e.y - dh, dw, dh); } }
+    else { if(img && img.loaded && !img.failed) ctx.drawImage(img, e.x - dw/2, e.y - dh, dw, dh); else { ctx.fillStyle='#9ca3af'; ctx.fillRect(e.x - dw/2, e.y - dh, dw, dh); } }
+    ctx.restore();
+  }
+}
+
+function drawPause(){
+  ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fillRect(0,0,W,H);
+  const px=W/2-30, py=H/2-40, barW=20, barH=80, gap=40;
+  ctx.fillStyle='rgba(255,255,255,0.9)';
+  ctx.fillRect(px,py,barW,barH);
+  ctx.fillRect(px+barW+gap,py,barW,barH);
+  ctx.font='bold 24px system-ui'; ctx.textAlign='center'; ctx.fillText('PAUSED', W/2, py+barH+30);
+}
+
+/* לולאה */
+function loop(){
+  const now=performance.now(); const dt=Math.min(0.03,(now-tPrev)/1000); tPrev=now;
+  if(alive && !paused) update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+reset();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "name": "yossi-boxi-web",
+  "private": true,
+  "dependencies": {
+    "firebase-admin": "^13.0.2"
+  }
+}
