@@ -1,10 +1,21 @@
 import { logout } from "./firebaseAuth.js";
-import { apiProfileGet } from "./api.js";
-import { requireSessionOrGuest, getSession, isGuest, getGuestProfile, setCachedProfile, getCachedProfile } from "./state.js";
+import { apiProfileGet, apiSubmitRun } from "./api.js";
+import {
+  requireSessionOrGuest,
+  isGuest,
+  getGuestProfile,
+  saveGuestProfile,
+  setCachedProfile,
+  getCachedProfile,
+  getPendingRun,
+  clearPendingRun
+} from "./state.js";
 
 requireSessionOrGuest();
 
 const $ = (id) => document.getElementById(id);
+
+function skinStandUrl(id){ return `assets/skins/${id}/stand.webp`; }
 
 async function loadProfile(){
   if(isGuest()){
@@ -17,21 +28,48 @@ async function loadProfile(){
   return p;
 }
 
-function skinStandUrl(skinId){
-  return `assets/skins/${skinId}/stand.webp`;
+async function applyPendingRun(p){
+  const run = getPendingRun();
+  if(!run) return p;
+
+  const score = Math.max(0, Math.floor(run.score || 0));
+  const coinsEarned = Math.max(0, Math.floor(run.coinsEarned || 0));
+  if(score === 0 && coinsEarned === 0){
+    clearPendingRun();
+    return p;
+  }
+
+  if(isGuest()){
+    const g = getGuestProfile();
+    g.coins = (g.coins || 0) + coinsEarned;
+    g.bestScore = Math.max(g.bestScore || 0, score);
+    saveGuestProfile(g);
+    clearPendingRun();
+    return g;
+  }
+
+  try{
+    const updated = await apiSubmitRun(score, coinsEarned);
+    setCachedProfile(updated);
+    clearPendingRun();
+    return updated;
+  }catch{
+    // keep pending (menu will try again next load)
+    return p;
+  }
 }
 
-const sess = getSession();
-$("modeBadge").textContent = sess.mode === "guest" ? "Guest" : "Online";
+function render(p){
+  $("uName").textContent = p.username || "Player";
+  $("uCoins").textContent = p.coins ?? 0;
+  $("uBest").textContent  = p.bestScore ?? 0;
+  $("skinImg").src = skinStandUrl(p.currentSkin || "yossi_classic");
+}
 
 $("btnLogout").addEventListener("click", async () => {
-  if(isGuest()){
-    localStorage.removeItem("yossi_session_v1");
-    location.href = "index.html";
-    return;
-  }
-  await logout();
+  try{ await logout(); }catch{}
   localStorage.removeItem("yossi_session_v1");
+  localStorage.removeItem("yossi_cached_profile_v1");
   location.href = "index.html";
 });
 
@@ -39,8 +77,15 @@ $("btnStart").addEventListener("click", () => location.href = "game.html");
 $("btnShop").addEventListener("click", () => location.href = "shop.html");
 $("btnLb").addEventListener("click", () => location.href = "leaderboard.html");
 
-const p = await loadProfile();
-$("uName").textContent = p.username || "Player";
-$("uCoins").textContent = p.coins ?? 0;
-$("uBest").textContent = p.bestScore ?? 0;
-$("skinImg").src = skinStandUrl(p.currentSkin || "yossi_classic");
+let p = await loadProfile();
+p = await applyPendingRun(p);
+render(p);
+
+// (optional) quick refresh for auth, so menu stays current without manual refresh
+if(!isGuest()){
+  try{
+    const fresh = await apiProfileGet();
+    setCachedProfile(fresh);
+    render(fresh);
+  }catch{}
+}
