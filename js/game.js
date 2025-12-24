@@ -14,6 +14,7 @@ requireSessionOrGuest();
 
 const cvs = document.getElementById("game");
 const ctx = cvs.getContext("2d");
+const loader = document.getElementById("loader");
 
 const ui = {
   score: document.getElementById("score"),
@@ -70,7 +71,7 @@ function applyLayout(){
 applyLayout();
 addEventListener("resize", applyLayout);
 
-/* assets */
+/* asset loader */
 function loadImg(src){
   const i = new Image();
   i.src = src;
@@ -80,8 +81,17 @@ function loadImg(src){
   i.onerror = () => i.failed = true;
   return i;
 }
+function waitImg(img){
+  return new Promise((resolve) => {
+    if(!img) return resolve();
+    if(img.complete && img.naturalWidth > 0) return resolve();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+  });
+}
 
 const enemyImgs = [1,2,3].map(n => loadImg(`assets/enemy${n}.webp`));
+const heartImg = loadImg(HEART_URL);
 
 function loadSkin(name){
   return {
@@ -104,10 +114,11 @@ if(isGuest()){
     skinId = p.currentSkin || "yossi_classic";
   }catch{}
 }
+
 let skin = loadSkin(skinId);
 ui.skinName.textContent = skin.name;
 
-/* UI hearts */
+/* hearts */
 let hp = 3;
 function renderHearts(){
   ui.hearts.innerHTML = "";
@@ -118,7 +129,6 @@ function renderHearts(){
     ui.hearts.appendChild(im);
   }
 }
-renderHearts();
 
 /* sound */
 let ACtx = null;
@@ -139,7 +149,7 @@ function playEnemyHitPlayer(){
 /* game state */
 let enemies = [];
 let coinsEarned = 0;
-let scoreF = 0;            // float accumulator
+let scoreF = 0;
 let score = 0;
 
 let alive = true;
@@ -151,6 +161,7 @@ let spawnRate = 800;
 let speedBase = 250;
 
 let committed = false;
+let prevAttacking = false;
 
 function currentRun(){
   return { score: Math.floor(scoreF), coinsEarned: Math.floor(coinsEarned) };
@@ -182,7 +193,7 @@ async function commitRun(){
     setCachedProfile(updated);
     clearPendingRun();
   }catch{
-    // keep pending - menu will retry
+    // keep pending, menu will retry
   }
 }
 
@@ -201,21 +212,6 @@ addEventListener("beforeunload", () => {
   if(hasProgress(run)) setPendingRun(run);
 });
 
-/* spawn */
-function spawn(){
-  const side = Math.random() < 0.5 ? -1 : 1;
-  const laneIdx = Math.floor(Math.random() * 3);
-  const x = side < 0 ? -ENEMY_SIZE : W + ENEMY_SIZE;
-  const v = speedBase + Math.random() * 100;
-  const spriteIdx = Math.floor(Math.random() * 3);
-  enemies.push({
-    side, lane: laneIdx, x, y: lanes[laneIdx].y,
-    w: ENEMY_SIZE, h: ENEMY_SIZE, speed: v,
-    sprite: spriteIdx, dead:false, removeAt:0, cause:""
-  });
-}
-
-/* input */
 addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   if(k === " "){
@@ -231,20 +227,30 @@ addEventListener("keydown", (e) => {
   if(e.key === "ArrowRight" || k === "d") punch(1);
 });
 
-/* logic */
-let prevAttacking = false;
+/* spawn */
+function spawn(){
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const laneIdx = Math.floor(Math.random() * 3);
+  const x = side < 0 ? -ENEMY_SIZE : W + ENEMY_SIZE;
+  const v = speedBase + Math.random() * 100;
+  const spriteIdx = Math.floor(Math.random() * 3);
+  enemies.push({
+    side, lane: laneIdx, x, y: lanes[laneIdx].y,
+    w: ENEMY_SIZE, h: ENEMY_SIZE, speed: v,
+    sprite: spriteIdx, dead:false, removeAt:0, cause:""
+  });
+}
 
+/* logic */
 function update(dt){
   const now = performance.now();
 
-  // score: 5 points per second (only while running)
   scoreF += dt * 5;
   score = Math.floor(scoreF);
 
   const attacking = now < player.attackEnd;
 
   if(!attacking && prevAttacking){
-    // attack ended, start idle cleanly
     player.pose = "stand";
     player.idleT = 0;
   }
@@ -257,7 +263,6 @@ function update(dt){
   }
   prevAttacking = attacking;
 
-  // spawn
   spawnTimer += dt * 1000;
   if(spawnTimer >= spawnRate){
     spawnTimer = 0;
@@ -266,7 +271,6 @@ function update(dt){
 
   const center = player.x;
 
-  // move enemies
   for(const e of enemies){
     if(e.dead){
       if(e.cause === "byPlayer"){
@@ -280,15 +284,16 @@ function update(dt){
     const dir = e.x < center ? 1 : -1;
     e.x += dir * e.speed * dt;
 
-    // reached player
     if(Math.abs(e.x - center) < 26){
       e.dead = true;
       e.cause = "hitPlayer";
       e.removeAt = now + 90;
       playEnemyHitPlayer();
       hurtUntil = now + 220;
+
       hp--;
       renderHearts();
+
       if(hp <= 0){
         alive = false;
         endGame();
@@ -296,7 +301,6 @@ function update(dt){
     }
   }
 
-  // cleanup
   enemies = enemies.filter(e => {
     if(e.cause === "hitPlayer" && e.removeAt && now >= e.removeAt) return false;
     if(e.cause === "byPlayer" && (e.y < -120 || e.x < -220 || e.x > W + 220)) return false;
@@ -307,11 +311,10 @@ function update(dt){
 function punch(dir){
   if(!alive || paused) return;
   const now = performance.now();
-  if(now < player.attackEnd) return; // constant attack duration, no interruption
+  if(now < player.attackEnd) return;
 
   player.facing = dir;
 
-  // find closest enemy on that side
   const center = player.x;
   let target = null, best = 1e9;
   for(const e of enemies){
@@ -326,14 +329,12 @@ function punch(dir){
   player.pose = laneWanted === 2 ? "top_hit" : laneWanted === 1 ? "middle_hit" : "bottom_hit";
   player.attackEnd = now + player.atkDur;
 
-  // resolve hit
   if(target && Math.abs(target.x - center) <= HIT_RANGE){
     target.dead = true;
     target.cause = "byPlayer";
 
-    coinsEarned += 1; // 1 coin per kill
+    coinsEarned += 1;
 
-    // difficulty ramp (still based on kills, score stays time-based)
     if(spawnRate > 420) spawnRate -= 10;
     speedBase += 1;
   }
@@ -347,10 +348,25 @@ async function endGame(){
 }
 
 /* draw */
+function drawPausedOverlay(){
+  ctx.fillStyle = "rgba(0,0,0,.55)";
+  ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = "rgba(255,255,255,.95)";
+  ctx.font = "1000 64px system-ui";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("PAUSED", W/2, H/2);
+}
+
 function draw(){
   ctx.clearRect(0,0,W,H);
+
   drawPlayer();
   drawEnemies();
+
+  if(paused && alive){
+    drawPausedOverlay();
+  }
 
   ui.score.textContent = String(score);
   ui.coins.textContent = String(coinsEarned);
@@ -369,14 +385,12 @@ function drawPlayer(){
   ctx.translate(player.x, 0);
   if(player.facing < 0) ctx.scale(-1, 1);
 
+  // No blue fallback. If image missing, draw nothing.
   if(img && img.loaded && !img.failed){
     ctx.drawImage(img, -dw/2, player.baseY - dh, dw, dh);
-  }else{
-    ctx.fillStyle = "#2563eb";
-    ctx.fillRect(-dw/2, player.baseY - dh, dw, dh);
   }
 
-  if(performance.now() < hurtUntil){
+  if(performance.now() < hurtUntil && img && img.loaded && !img.failed){
     const prev = ctx.globalCompositeOperation;
     const prevA = ctx.globalAlpha;
     ctx.globalCompositeOperation = "source-atop";
@@ -400,10 +414,8 @@ function drawEnemies(){
       ctx.translate(e.x, 0);
       ctx.scale(-1, 1);
       if(img && img.loaded && !img.failed) ctx.drawImage(img, -dw/2, e.y - dh, dw, dh);
-      else { ctx.fillStyle="#9ca3af"; ctx.fillRect(-dw/2, e.y - dh, dw, dh); }
     }else{
       if(img && img.loaded && !img.failed) ctx.drawImage(img, e.x - dw/2, e.y - dh, dw, dh);
-      else { ctx.fillStyle="#9ca3af"; ctx.fillRect(e.x - dw/2, e.y - dh, dw, dh); }
     }
     ctx.restore();
   }
@@ -431,8 +443,22 @@ function reset(){
   player.attackEnd = 0;
 
   committed = false;
+  prevAttacking = false;
   ui.over.style.display = "none";
 }
+
+async function preloadAll(){
+  const list = [
+    ...enemyImgs,
+    heartImg,
+    skin.stand, skin.crouch, skin.top_hit, skin.middle_hit, skin.bottom_hit
+  ];
+  await Promise.all(list.map(waitImg));
+}
+
+await preloadAll();
+renderHearts();
+loader?.remove();
 
 reset();
 
