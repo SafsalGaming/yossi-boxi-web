@@ -1,6 +1,14 @@
 import { HEART_URL } from "./constants.js";
 import { apiProfileGet, apiSubmitRun } from "./api.js";
-import { requireSessionOrGuest, isGuest, getGuestProfile, saveGuestProfile, setCachedProfile } from "./state.js";
+import {
+  requireSessionOrGuest,
+  isGuest,
+  getGuestProfile,
+  saveGuestProfile,
+  setCachedProfile,
+  setPendingRun,
+  clearPendingRun
+} from "./state.js";
 
 requireSessionOrGuest();
 
@@ -9,6 +17,7 @@ const ctx = cvs.getContext("2d");
 
 const ui = {
   score: document.getElementById("score"),
+  coins: document.getElementById("coins"),
   skinName: document.getElementById("skinName"),
   hearts: document.getElementById("hearts"),
   over: document.getElementById("over"),
@@ -20,7 +29,6 @@ const ui = {
 };
 
 const W = cvs.width, H = cvs.height;
-
 function pctFromBottom(pct){ return H * (1 - pct/100); }
 
 const SETTINGS = {
@@ -38,12 +46,13 @@ let HIT_RANGE = 220;
 const player = {
   x: W/2,
   baseY: 0,
-  drawW: 0, drawH: 0,
+  drawW: 0,
+  drawH: 0,
   facing: 1,
-  lastAtk: 0,
-  atkDur: 200,
   pose: "stand",
   idleT: 0,
+  atkDur: 200,
+  attackEnd: 0,
 };
 
 function applyLayout(){
@@ -59,65 +68,46 @@ function applyLayout(){
   player.atkDur = SETTINGS.timing.attackHoldMs;
 }
 applyLayout();
-
-let paused = false;
-ui.pauseBtn.addEventListener("click", () => paused = !paused);
-ui.backBtn.addEventListener("click", () => location.href = "menu.html");
-ui.toMenu.addEventListener("click", () => location.href = "menu.html");
-
-addEventListener("keydown", (e) => {
-  const k = e.key.toLowerCase();
-  if(k === " "){ e.preventDefault(); paused = !paused; return; }
-  if(e.key === "ArrowLeft" || k === "a") punch(-1);
-  if(e.key === "ArrowRight" || k === "d") punch(1);
-});
+addEventListener("resize", applyLayout);
 
 /* assets */
-async function loadBitmap(url){
-  if("createImageBitmap" in window){
-    const r = await fetch(url, { cache:"force-cache" });
-    if(!r.ok) throw new Error("asset " + url);
-    const b = await r.blob();
-    return await createImageBitmap(b);
-  }
-  return await new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = url;
-  });
+function loadImg(src){
+  const i = new Image();
+  i.src = src;
+  i.loaded = false;
+  i.failed = false;
+  i.onload = () => i.loaded = true;
+  i.onerror = () => i.failed = true;
+  return i;
 }
 
-const SKIN_IDS = ["yossi_classic","yossi_bossi","yossi_dossi","yoyo_yossi"];
+const enemyImgs = [1,2,3].map(n => loadImg(`assets/enemy${n}.webp`));
 
-function skinPaths(id){
+function loadSkin(name){
   return {
-    name:id,
-    stand:      `assets/skins/${id}/stand.webp`,
-    crouch:     `assets/skins/${id}/crouch.webp`,
-    top_hit:    `assets/skins/${id}/top_hit.webp`,
-    middle_hit: `assets/skins/${id}/middle_hit.webp`,
-    bottom_hit: `assets/skins/${id}/bottom_hit.webp`,
+    name,
+    stand:      loadImg(`assets/skins/${name}/stand.webp`),
+    crouch:     loadImg(`assets/skins/${name}/crouch.webp`),
+    top_hit:    loadImg(`assets/skins/${name}/top_hit.webp`),
+    middle_hit: loadImg(`assets/skins/${name}/middle_hit.webp`),
+    bottom_hit: loadImg(`assets/skins/${name}/bottom_hit.webp`),
   };
 }
 
-async function loadSkinBitmaps(id){
-  const p = skinPaths(id);
-  const [stand,crouch,top,middle,bottom] = await Promise.all([
-    loadBitmap(p.stand),
-    loadBitmap(p.crouch),
-    loadBitmap(p.top_hit),
-    loadBitmap(p.middle_hit),
-    loadBitmap(p.bottom_hit),
-  ]);
-  return { name:id, stand, crouch, top_hit:top, middle_hit:middle, bottom_hit:bottom };
+let skinId = "yossi_classic";
+if(isGuest()){
+  skinId = getGuestProfile().currentSkin || "yossi_classic";
+}else{
+  try{
+    const p = await apiProfileGet();
+    setCachedProfile(p);
+    skinId = p.currentSkin || "yossi_classic";
+  }catch{}
 }
+let skin = loadSkin(skinId);
+ui.skinName.textContent = skin.name;
 
-async function loadEnemyBitmaps(){
-  return await Promise.all([1,2,3].map(n => loadBitmap(`assets/enemy${n}.webp`)));
-}
-
-/* hearts */
+/* UI hearts */
 let hp = 3;
 function renderHearts(){
   ui.hearts.innerHTML = "";
@@ -128,36 +118,90 @@ function renderHearts(){
     ui.hearts.appendChild(im);
   }
 }
+renderHearts();
+
+/* sound */
+let ACtx = null;
+function ctxAudio(){ if(!ACtx) ACtx = new (window.AudioContext||window.webkitAudioContext)(); return ACtx; }
+function playEnemyHitPlayer(){
+  const ctxA = ctxAudio();
+  const dur = 0.08, rate = ctxA.sampleRate, frames = Math.floor(rate*dur);
+  const buf = ctxA.createBuffer(1, frames, rate);
+  const data = buf.getChannelData(0);
+  for(let i=0;i<frames;i++) data[i] = (Math.random()*2-1) * (1 - i/frames);
+  const src = ctxA.createBufferSource(); src.buffer = buf;
+  const filt = ctxA.createBiquadFilter(); filt.type = "lowpass"; filt.frequency.value = 700;
+  const gain = ctxA.createGain(); gain.gain.value = 0.6;
+  src.connect(filt); filt.connect(gain); gain.connect(ctxA.destination);
+  src.start();
+}
 
 /* game state */
 let enemies = [];
-let score = 0;
 let coinsEarned = 0;
+let scoreF = 0;            // float accumulator
+let score = 0;
+
 let alive = true;
+let paused = false;
 let hurtUntil = 0;
 
 let spawnTimer = 0;
 let spawnRate = 800;
 let speedBase = 250;
 
-function reset(){
-  enemies.length = 0;
-  score = 0;
-  coinsEarned = 0;
-  hp = 3;
-  alive = true;
-  paused = false;
-  spawnTimer = 0;
-  spawnRate = 800;
-  speedBase = 250;
-  player.lastAtk = 0;
-  player.pose = "stand";
-  player.facing = 1;
-  player.idleT = 0;
-  ui.over.style.display = "none";
-  renderHearts();
+let committed = false;
+
+function currentRun(){
+  return { score: Math.floor(scoreF), coinsEarned: Math.floor(coinsEarned) };
+}
+function hasProgress(r){
+  return (r.score > 0) || (r.coinsEarned > 0);
 }
 
+async function commitRun(){
+  if(committed) return;
+  committed = true;
+
+  const run = currentRun();
+  if(!hasProgress(run)) return;
+
+  setPendingRun(run);
+
+  if(isGuest()){
+    const g = getGuestProfile();
+    g.coins = (g.coins || 0) + run.coinsEarned;
+    g.bestScore = Math.max(g.bestScore || 0, run.score);
+    saveGuestProfile(g);
+    clearPendingRun();
+    return;
+  }
+
+  try{
+    const updated = await apiSubmitRun(run.score, run.coinsEarned);
+    setCachedProfile(updated);
+    clearPendingRun();
+  }catch{
+    // keep pending - menu will retry
+  }
+}
+
+async function exitToMenu(){
+  await commitRun();
+  location.href = "menu.html";
+}
+
+ui.backBtn.addEventListener("click", exitToMenu);
+ui.toMenu.addEventListener("click", exitToMenu);
+ui.pauseBtn.addEventListener("click", () => paused = !paused);
+
+addEventListener("beforeunload", () => {
+  if(committed) return;
+  const run = currentRun();
+  if(hasProgress(run)) setPendingRun(run);
+});
+
+/* spawn */
 function spawn(){
   const side = Math.random() < 0.5 ? -1 : 1;
   const laneIdx = Math.floor(Math.random() * 3);
@@ -165,45 +209,55 @@ function spawn(){
   const v = speedBase + Math.random() * 100;
   const spriteIdx = Math.floor(Math.random() * 3);
   enemies.push({
-    side, lane: laneIdx,
-    x, y: lanes[laneIdx].y,
-    w: ENEMY_SIZE, h: ENEMY_SIZE,
-    speed: v, sprite: spriteIdx,
-    dead:false, removeAt:0, cause:"",
+    side, lane: laneIdx, x, y: lanes[laneIdx].y,
+    w: ENEMY_SIZE, h: ENEMY_SIZE, speed: v,
+    sprite: spriteIdx, dead:false, removeAt:0, cause:""
   });
 }
 
-/* simple hit sound */
-let ACtx = null;
-function ctxAudio(){ if(!ACtx) ACtx = new (window.AudioContext||window.webkitAudioContext)(); return ACtx; }
-function playHit(){
-  const a = ctxAudio();
-  const dur = 0.08;
-  const rate = a.sampleRate;
-  const frames = Math.floor(rate * dur);
-  const buf = a.createBuffer(1, frames, rate);
-  const data = buf.getChannelData(0);
-  for(let i=0;i<frames;i++) data[i] = (Math.random()*2-1) * (1 - i/frames);
+/* input */
+addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase();
+  if(k === " "){
+    e.preventDefault();
+    paused = !paused;
+    return;
+  }
+  if(k === "escape"){
+    exitToMenu();
+    return;
+  }
+  if(e.key === "ArrowLeft" || k === "a") punch(-1);
+  if(e.key === "ArrowRight" || k === "d") punch(1);
+});
 
-  const src = a.createBufferSource(); src.buffer = buf;
-  const filt = a.createBiquadFilter(); filt.type="lowpass"; filt.frequency.value=700;
-  const gain = a.createGain(); gain.gain.value = 0.6;
-
-  src.connect(filt); filt.connect(gain); gain.connect(a.destination);
-  src.start();
-}
+/* logic */
+let prevAttacking = false;
 
 function update(dt){
   const now = performance.now();
-  const attacking = (now - player.lastAtk) <= player.atkDur;
+
+  // score: 5 points per second (only while running)
+  scoreF += dt * 5;
+  score = Math.floor(scoreF);
+
+  const attacking = now < player.attackEnd;
+
+  if(!attacking && prevAttacking){
+    // attack ended, start idle cleanly
+    player.pose = "stand";
+    player.idleT = 0;
+  }
 
   if(!attacking){
     player.idleT += dt;
-    const cycle = Math.max(0.1, SETTINGS.timing.idleCycleSec);
+    const cycle = Math.max(0.12, SETTINGS.timing.idleCycleSec);
     const phase = (player.idleT % cycle) / cycle;
     player.pose = phase < 0.5 ? "stand" : "crouch";
   }
+  prevAttacking = attacking;
 
+  // spawn
   spawnTimer += dt * 1000;
   if(spawnTimer >= spawnRate){
     spawnTimer = 0;
@@ -212,6 +266,7 @@ function update(dt){
 
   const center = player.x;
 
+  // move enemies
   for(const e of enemies){
     if(e.dead){
       if(e.cause === "byPlayer"){
@@ -225,17 +280,15 @@ function update(dt){
     const dir = e.x < center ? 1 : -1;
     e.x += dir * e.speed * dt;
 
+    // reached player
     if(Math.abs(e.x - center) < 26){
       e.dead = true;
       e.cause = "hitPlayer";
       e.removeAt = now + 90;
-
-      playHit();
+      playEnemyHitPlayer();
       hurtUntil = now + 220;
-
       hp--;
       renderHearts();
-
       if(hp <= 0){
         alive = false;
         endGame();
@@ -243,6 +296,7 @@ function update(dt){
     }
   }
 
+  // cleanup
   enemies = enemies.filter(e => {
     if(e.cause === "hitPlayer" && e.removeAt && now >= e.removeAt) return false;
     if(e.cause === "byPlayer" && (e.y < -120 || e.x < -220 || e.x > W + 220)) return false;
@@ -253,15 +307,13 @@ function update(dt){
 function punch(dir){
   if(!alive || paused) return;
   const now = performance.now();
-  if(now - player.lastAtk < player.atkDur) return;
+  if(now < player.attackEnd) return; // constant attack duration, no interruption
 
-  player.lastAtk = now;
   player.facing = dir;
 
+  // find closest enemy on that side
   const center = player.x;
-  let target = null;
-  let best = 1e9;
-
+  let target = null, best = 1e9;
   for(const e of enemies){
     if(e.dead) continue;
     const correctSide = dir < 0 ? e.x < center : e.x > center;
@@ -272,28 +324,40 @@ function punch(dir){
 
   const laneWanted = target ? target.lane : 1;
   player.pose = laneWanted === 2 ? "top_hit" : laneWanted === 1 ? "middle_hit" : "bottom_hit";
+  player.attackEnd = now + player.atkDur;
 
-  const stamp = player.lastAtk;
-  setTimeout(() => {
-    if(!paused && player.lastAtk === stamp){
-      player.pose = "stand";
-      player.idleT = 0;
-    }
-  }, player.atkDur);
-
+  // resolve hit
   if(target && Math.abs(target.x - center) <= HIT_RANGE){
     target.dead = true;
     target.cause = "byPlayer";
-    score += 10;
-    coinsEarned += 5;
 
+    coinsEarned += 1; // 1 coin per kill
+
+    // difficulty ramp (still based on kills, score stays time-based)
     if(spawnRate > 420) spawnRate -= 10;
     speedBase += 1;
   }
 }
 
+async function endGame(){
+  ui.finalScore.textContent = String(score);
+  ui.finalCoins.textContent = String(coinsEarned);
+  ui.over.style.display = "flex";
+  await commitRun();
+}
+
 /* draw */
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  drawPlayer();
+  drawEnemies();
+
+  ui.score.textContent = String(score);
+  ui.coins.textContent = String(coinsEarned);
+}
+
 function drawPlayer(){
+  const img = skin[player.pose];
   const dw = player.drawW, dh = player.drawH;
 
   ctx.fillStyle = "rgba(0,0,0,.35)";
@@ -303,10 +367,14 @@ function drawPlayer(){
 
   ctx.save();
   ctx.translate(player.x, 0);
-  if(player.facing < 0) ctx.scale(-1,1);
+  if(player.facing < 0) ctx.scale(-1, 1);
 
-  const img = skin[player.pose] || skin.stand;
-  if(img) ctx.drawImage(img, -dw/2, player.baseY - dh, dw, dh);
+  if(img && img.loaded && !img.failed){
+    ctx.drawImage(img, -dw/2, player.baseY - dh, dw, dh);
+  }else{
+    ctx.fillStyle = "#2563eb";
+    ctx.fillRect(-dw/2, player.baseY - dh, dw, dh);
+  }
 
   if(performance.now() < hurtUntil){
     const prev = ctx.globalCompositeOperation;
@@ -326,74 +394,45 @@ function drawEnemies(){
   for(const e of enemies){
     const img = enemyImgs[e.sprite];
     const dw = e.w, dh = e.h;
+
     ctx.save();
     if(e.side < 0){
       ctx.translate(e.x, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(img, -dw/2, e.y - dh, dw, dh);
+      if(img && img.loaded && !img.failed) ctx.drawImage(img, -dw/2, e.y - dh, dw, dh);
+      else { ctx.fillStyle="#9ca3af"; ctx.fillRect(-dw/2, e.y - dh, dw, dh); }
     }else{
-      ctx.drawImage(img, e.x - dw/2, e.y - dh, dw, dh);
+      if(img && img.loaded && !img.failed) ctx.drawImage(img, e.x - dw/2, e.y - dh, dw, dh);
+      else { ctx.fillStyle="#9ca3af"; ctx.fillRect(e.x - dw/2, e.y - dh, dw, dh); }
     }
     ctx.restore();
   }
 }
 
-function drawPause(){
-  ctx.fillStyle="rgba(0,0,0,0.45)";
-  ctx.fillRect(0,0,W,H);
-  ctx.fillStyle="rgba(255,255,255,0.92)";
-  ctx.font="bold 28px system-ui";
-  ctx.textAlign="center";
-  ctx.fillText("PAUSED", W/2, H/2);
+/* loop */
+function reset(){
+  enemies.length = 0;
+  coinsEarned = 0;
+  scoreF = 0;
+  score = 0;
+
+  alive = true;
+  paused = false;
+  hp = 3;
+  renderHearts();
+
+  hurtUntil = 0;
+  spawnTimer = 0;
+  spawnRate = 800;
+  speedBase = 250;
+
+  player.pose = "stand";
+  player.idleT = 0;
+  player.attackEnd = 0;
+
+  committed = false;
+  ui.over.style.display = "none";
 }
-
-function draw(){
-  ctx.clearRect(0,0,W,H);
-  drawPlayer();
-  drawEnemies();
-  if(paused && alive) drawPause();
-  ui.score.textContent = String(score);
-}
-
-/* end + submit */
-async function endGame(){
-  ui.finalScore.textContent = String(score);
-  ui.finalCoins.textContent = String(coinsEarned);
-  ui.over.style.display = "flex";
-
-  if(isGuest()){
-    const g = getGuestProfile();
-    g.coins = (g.coins || 0) + coinsEarned;
-    g.bestScore = Math.max(g.bestScore || 0, score);
-    saveGuestProfile(g);
-    return;
-  }
-
-  try{
-    const updated = await apiSubmitRun(score, coinsEarned);
-    setCachedProfile(updated);
-  }catch{
-    // אם נכשל, לא שובר את המסך
-  }
-}
-
-/* boot */
-let skin = null;
-let enemyImgs = null;
-
-async function loadProfile(){
-  if(isGuest()) return getGuestProfile();
-  const p = await apiProfileGet();
-  setCachedProfile(p);
-  return p;
-}
-
-const profile = await loadProfile();
-const skinId = profile.currentSkin || "yossi_classic";
-ui.skinName.textContent = skinId;
-
-enemyImgs = await loadEnemyBitmaps();
-skin = await loadSkinBitmaps(skinId);
 
 reset();
 
