@@ -5,19 +5,31 @@ import { requireSessionOrGuest, isGuest, getGuestProfile, saveGuestProfile, setC
 requireSessionOrGuest();
 
 const $ = (id) => document.getElementById(id);
+const loader = document.getElementById("loader");
+
 $("back").addEventListener("click", () => location.href = "menu.html");
+
+function hideLoader(){ loader?.remove(); }
+
+function waitFirstSkinImage(){
+  return new Promise((resolve) => {
+    const img = document.querySelector("#grid img.skinImg");
+    if(!img) return resolve();
+    if(img.complete && img.naturalWidth > 0) return resolve();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+  });
+}
 
 function standUrl(id){ return `assets/skins/${id}/stand.webp`; }
 
-function setMsg(t, ok=false){
+function setError(t){
   $("msg").textContent = t || "";
-  $("msg").style.color = ok ? "var(--green)" : "var(--red)";
+  $("msg").style.color = "var(--red)";
 }
 
 async function loadProfile(){
-  if(isGuest()){
-    return getGuestProfile();
-  }
+  if(isGuest()) return getGuestProfile();
   const p = await apiProfileGet();
   setCachedProfile(p);
   return p;
@@ -57,6 +69,7 @@ async function equipSkin(skinId){
 }
 
 function render(p){
+  $("msg").textContent = ""; // only errors
   $("uName").textContent = p.username || "Player";
   $("uCoins").textContent = p.coins ?? 0;
   $("uSkin").textContent = p.currentSkin || "yossi_classic";
@@ -91,7 +104,7 @@ function render(p){
           <div class="row" style="gap:8px">
             ${
               !owned
-                ? `<button class="btn success" data-act="buy" data-id="${s.id}" ${canBuy ? "" : "disabled"}>${canBuy ? "Buy" : "Need coins"}</button>`
+                ? `<button class="btn success" data-act="buy" data-id="${s.id}" ${canBuy ? "" : "disabled"}>Buy</button>`
                 : current
                   ? `<button class="btn" disabled>Equipped</button>`
                   : `<button class="btn primary" data-act="equip" data-id="${s.id}">Equip</button>`
@@ -104,26 +117,22 @@ function render(p){
     card.addEventListener("click", async (e) => {
       const btn = e.target?.closest?.("button");
       if(!btn) return;
+
       const act = btn.dataset.act;
       const id = btn.dataset.id;
 
       try{
-        setMsg("");
         btn.disabled = true;
+        $("msg").textContent = "";
 
         let updated = p;
-        if(act === "buy"){
-          updated = await buySkin(id);
-          setMsg("Purchased!", true);
-        }else if(act === "equip"){
-          updated = await equipSkin(id);
-          setMsg("Equipped!", true);
-        }
+        if(act === "buy") updated = await buySkin(id);
+        if(act === "equip") updated = await equipSkin(id);
 
         p = updated;
         render(p);
       }catch(err){
-        setMsg(err.message || "Failed.");
+        setError(err.message || "Failed.");
         render(p);
       }
     });
@@ -135,6 +144,9 @@ function render(p){
 try{
   let p = await loadProfile();
   render(p);
+  await Promise.race([waitFirstSkinImage(), new Promise(r => setTimeout(r, 700))]);
+  hideLoader();
 }catch(e){
-  setMsg(e.message || "Failed to load shop.");
+  hideLoader();
+  setError(e.message || "Failed to load shop.");
 }
