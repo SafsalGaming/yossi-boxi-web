@@ -11,7 +11,10 @@
     .hud{position:absolute;inset:0;pointer-events:none;text-shadow:0 2px 8px rgba(0,0,0,.6)}
     .hudTop{position:absolute;left:14px;right:14px;top:10px;display:flex;gap:10px;justify-content:space-between;align-items:center}
     .hearts{
-      position:absolute;top:10px;left:50%;transform:translateX(-50%);
+       position:absolute;
+  top:58px; /* יורד מתחת לשורת ה-HUD */
+  left:50%;
+  transform:translateX(-50%);
       display:flex;gap:10px;align-items:center;justify-content:center;pointer-events:none;
     }
     .hearts img{width:34px;height:34px;image-rendering:pixelated;filter:drop-shadow(0 8px 14px rgba(0,0,0,.55))}
@@ -74,3 +77,4 @@
   <script type="module" src="js/game.js"></script>
 </body>
 </html>
+
