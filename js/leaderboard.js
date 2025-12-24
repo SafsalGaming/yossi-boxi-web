@@ -4,7 +4,11 @@ import { requireSessionOrGuest } from "./state.js";
 requireSessionOrGuest();
 
 const $ = (id) => document.getElementById(id);
+const loader = document.getElementById("loader");
+
 $("back").addEventListener("click", () => location.href = "menu.html");
+
+function hideLoader(){ loader?.remove(); }
 
 function setMsg(t, ok=false){
   $("msg").textContent = t || "";
@@ -52,6 +56,8 @@ try{
   }
 
   setMsg("");
+  hideLoader();
 }catch(e){
+  hideLoader();
   setMsg(e.message || "Failed to load leaderboard.");
 }
