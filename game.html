@@ -8,23 +8,13 @@
   <style>
     #wrap{position:relative;border-radius:16px;overflow:hidden;box-shadow:var(--shadow)}
     canvas{display:block;background:#0d1117}
-
     .hud{position:absolute;inset:0;pointer-events:none;text-shadow:0 2px 8px rgba(0,0,0,.6)}
     .hudTop{position:absolute;left:14px;right:14px;top:10px;display:flex;gap:10px;justify-content:space-between;align-items:center}
-
     .hearts{
-      position:absolute;
-      top:10px;
-      left:50%;
-      transform:translateX(-50%);
-      display:flex;
-      gap:10px;
-      align-items:center;
-      justify-content:center;
-      pointer-events:none;
+      position:absolute;top:10px;left:50%;transform:translateX(-50%);
+      display:flex;gap:10px;align-items:center;justify-content:center;pointer-events:none;
     }
     .hearts img{width:34px;height:34px;image-rendering:pixelated;filter:drop-shadow(0 8px 14px rgba(0,0,0,.55))}
-
     .overlay{
       position:absolute;inset:0;display:none;align-items:center;justify-content:center;
       background:rgba(0,0,0,.55);backdrop-filter:blur(10px);
@@ -40,6 +30,13 @@
   </style>
 </head>
 <body>
+  <div id="loader">
+    <div class="loaderBox">
+      <div class="spinner"></div>
+      <div class="pill">Loading...</div>
+    </div>
+  </div>
+
   <div class="wrap">
     <div id="wrap">
       <canvas id="game" width="960" height="540"></canvas>
@@ -47,8 +44,8 @@
       <div class="hud">
         <div class="hudTop">
           <div class="row" style="gap:10px">
-            <div class="pill">Score: <span id="score">0</span></div>
-            <div class="pill">Coins: <span id="coins">0</span></div>
+            <div class="pill">Score: <span id="score" class="num">0</span></div>
+            <div class="pill coins">Coins: <span id="coins" class="num coinsNum">0</span></div>
             <div class="pill">Skin: <span id="skinName">...</span></div>
           </div>
           <div class="row" style="gap:10px">
