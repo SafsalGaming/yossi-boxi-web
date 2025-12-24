@@ -10,14 +10,22 @@
     canvas{display:block;background:#0d1117}
     .hud{position:absolute;inset:0;pointer-events:none;text-shadow:0 2px 8px rgba(0,0,0,.6)}
     .hudTop{position:absolute;left:14px;right:14px;top:10px;display:flex;gap:10px;justify-content:space-between;align-items:center}
+
+    /* fixed width only in GAME */
+    .statPill{width:170px;justify-content:flex-start}
+    .coinsPill{width:140px}
+    .label{margin-right:6px;opacity:.92}
+    .gameNum{font-variant-numeric:tabular-nums}
+
     .hearts{
-       position:absolute;
-  top:58px; /* יורד מתחת לשורת ה-HUD */
-  left:50%;
-  transform:translateX(-50%);
+      position:absolute;
+      top:58px; /* היה גבוה מדי והתנגש בשורה העליונה */
+      left:50%;
+      transform:translateX(-50%);
       display:flex;gap:10px;align-items:center;justify-content:center;pointer-events:none;
     }
     .hearts img{width:34px;height:34px;image-rendering:pixelated;filter:drop-shadow(0 8px 14px rgba(0,0,0,.55))}
+
     .overlay{
       position:absolute;inset:0;display:none;align-items:center;justify-content:center;
       background:rgba(0,0,0,.55);backdrop-filter:blur(10px);
@@ -47,10 +55,14 @@
       <div class="hud">
         <div class="hudTop">
           <div class="row" style="gap:10px">
-            <div class="pill">Score: <span id="score" class="num">0</span></div>
-            <div class="pill coins">Coins: <span id="coins" class="num coinsNum">0</span></div>
-            <div class="pill">Skin: <span id="skinName">...</span></div>
+            <div class="pill statPill">
+              <span class="label">Score:</span><span id="score" class="gameNum">0</span>
+            </div>
+            <div class="pill coins statPill coinsPill">
+              <span class="label">Coins:</span><span id="coins" class="gameNum">0</span>
+            </div>
           </div>
+
           <div class="row" style="gap:10px">
             <button class="btn ghost" id="pauseBtn" style="pointer-events:auto">Pause (Space)</button>
             <button class="btn danger" id="backBtn" style="pointer-events:auto">Exit</button>
@@ -77,4 +89,3 @@
   <script type="module" src="js/game.js"></script>
 </body>
 </html>
-
