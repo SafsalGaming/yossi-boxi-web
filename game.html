@@ -6,8 +6,34 @@
   <title>YOSSI BOXI - Game</title>
   <link rel="stylesheet" href="css/app.css" />
   <style>
-    #wrap{position:relative;border-radius:16px;overflow:hidden;box-shadow:var(--shadow)}
-    canvas{display:block;background:#0d1117}
+    html,body{height:100%;margin:0;overflow:hidden}
+
+    /* override app.css padding that causes scroll */
+    .wrap{
+      min-height:100vh;
+      padding:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    /* fit game to viewport (16:9), no scroll */
+    #wrap{
+      position:relative;
+      width:min(960px, 100vw, calc((100vh - 12px) * 16 / 9));
+      aspect-ratio:16/9;
+      border-radius:16px;
+      overflow:hidden;
+      box-shadow:var(--shadow);
+    }
+
+    canvas#game{
+      display:block;
+      width:100%;
+      height:100%;
+      background:#0d1117;
+    }
+
     .hud{position:absolute;inset:0;pointer-events:none;text-shadow:0 2px 8px rgba(0,0,0,.6)}
     .hudTop{position:absolute;left:14px;right:14px;top:10px;display:flex;gap:10px;justify-content:space-between;align-items:center}
 
@@ -19,12 +45,12 @@
 
     .hearts{
       position:absolute;
-      top:58px; /* היה גבוה מדי והתנגש בשורה העליונה */
+      top:58px;
       left:50%;
       transform:translateX(-50%);
       display:flex;gap:10px;align-items:center;justify-content:center;pointer-events:none;
     }
-    .hearts img{width:34px;height:34px;image-rendering:pixelated;filter:drop-shadow(0 8px 14px rgba(0,0,0,.55))}
+    .hearts img{width:44px;height:44px;image-rendering:pixelated;filter:drop-shadow(0 8px 14px rgba(0,0,0,.55))}
 
     .overlay{
       position:absolute;inset:0;display:none;align-items:center;justify-content:center;
