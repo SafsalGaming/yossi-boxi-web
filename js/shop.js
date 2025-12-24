@@ -11,36 +11,30 @@ function standUrl(id){ return `assets/skins/${id}/stand.webp`; }
 
 function setMsg(t, ok=false){
   $("msg").textContent = t || "";
-  $("msg").style.color = ok ? "var(--ok)" : "var(--danger)";
+  $("msg").style.color = ok ? "var(--green)" : "var(--red)";
 }
 
 async function loadProfile(){
-  if(isGuest()) return getGuestProfile();
+  if(isGuest()){
+    return getGuestProfile();
+  }
   const p = await apiProfileGet();
   setCachedProfile(p);
   return p;
 }
 
-async function saveCurrentSkin(p, skinId){
-  if(isGuest()){
-    p.currentSkin = skinId;
-    if(!p.ownedSkins.includes("yossi_classic")) p.ownedSkins.push("yossi_classic");
-    saveGuestProfile(p);
-    return p;
-  }
-  const updated = await apiProfilePatch({ currentSkin: skinId });
-  setCachedProfile(updated);
-  return updated;
-}
+async function buySkin(skinId){
+  const s = SKINS.find(x => x.id === skinId);
+  if(!s) throw new Error("Unknown skin.");
 
-async function buy(p, skinId){
   if(isGuest()){
-    const s = SKINS.find(x=>x.id===skinId);
-    if(!s) throw new Error("skin?");
-    if(p.ownedSkins.includes(skinId)) return p;
-    if((p.coins||0) < s.price) throw new Error("אין מספיק מטבעות");
+    const p = getGuestProfile();
+    const owned = (p.ownedSkins || []).includes(skinId) || s.price === 0;
+    if(owned) return p;
+    if((p.coins || 0) < s.price) throw new Error("Not enough coins.");
+
     p.coins -= s.price;
-    p.ownedSkins = Array.from(new Set([...(p.ownedSkins||[]), skinId, "yossi_classic"]));
+    p.ownedSkins = [...(p.ownedSkins || []), skinId];
     saveGuestProfile(p);
     return p;
   }
@@ -50,44 +44,59 @@ async function buy(p, skinId){
   return updated;
 }
 
+async function equipSkin(skinId){
+  if(isGuest()){
+    const p = getGuestProfile();
+    p.currentSkin = skinId;
+    saveGuestProfile(p);
+    return p;
+  }
+  const updated = await apiProfilePatch({ currentSkin: skinId });
+  setCachedProfile(updated);
+  return updated;
+}
+
 function render(p){
   $("uName").textContent = p.username || "Player";
   $("uCoins").textContent = p.coins ?? 0;
   $("uSkin").textContent = p.currentSkin || "yossi_classic";
 
-  const grid = $("grid");
-  grid.innerHTML = "";
-  grid.style.gridTemplateColumns = window.innerWidth < 860 ? "1fr" : "1fr 1fr";
+  const row = $("grid");
+  row.innerHTML = "";
 
-  for(const s of SKINS){
+  const ordered = [...SKINS].sort((a,b) => a.price - b.price);
+
+  for(const s of ordered){
     const owned = (p.ownedSkins || []).includes(s.id) || s.price === 0;
     const current = (p.currentSkin === s.id);
+    const canBuy = (p.coins || 0) >= s.price;
 
     const card = document.createElement("div");
-    card.className = "card";
-    card.style.borderRadius = "14px";
+    card.className = "skinCard";
 
     card.innerHTML = `
       <div class="content">
-        <div class="row" style="gap:10px">
+        <div class="row" style="justify-content:space-between">
           <div class="pill">${s.name}</div>
           ${owned ? `<span class="badge">Owned</span>` : `<span class="badge locked">Locked</span>`}
         </div>
 
         <div style="height:10px"></div>
-        <img src="${standUrl(s.id)}" style="width:100%;max-height:280px;object-fit:contain;filter:drop-shadow(0 18px 22px rgba(0,0,0,.6))" />
+        <img class="skinImg" src="${standUrl(s.id)}" alt="${s.name}" />
 
         <div style="height:10px"></div>
 
-        <div class="row" style="gap:10px;flex-wrap:wrap">
-          <div class="pill">מחיר: ${s.price}</div>
-          <button class="btn ${current ? "primary" : ""}" data-act="select" data-id="${s.id}">
-            ${current ? "Selected" : "Select"}
-          </button>
-          ${
-            owned ? "" :
-            `<button class="btn primary" data-act="buy" data-id="${s.id}">Buy</button>`
-          }
+        <div class="row" style="justify-content:space-between;flex-wrap:wrap">
+          <div class="small">${s.price === 0 ? "Free" : `${s.price} coins`}</div>
+          <div class="row" style="gap:8px">
+            ${
+              !owned
+                ? `<button class="btn success" data-act="buy" data-id="${s.id}" ${canBuy ? "" : "disabled"}>${canBuy ? "Buy" : "Need coins"}</button>`
+                : current
+                  ? `<button class="btn" disabled>Equipped</button>`
+                  : `<button class="btn primary" data-act="equip" data-id="${s.id}">Equip</button>`
+            }
+          </div>
         </div>
       </div>
     `;
@@ -100,30 +109,32 @@ function render(p){
 
       try{
         setMsg("");
+        btn.disabled = true;
+
+        let updated = p;
         if(act === "buy"){
-          setMsg("קונה...", true);
-          p = await buy(p, id);
-          setMsg("נרכש!", true);
-          render(p);
+          updated = await buySkin(id);
+          setMsg("Purchased!", true);
+        }else if(act === "equip"){
+          updated = await equipSkin(id);
+          setMsg("Equipped!", true);
         }
-        if(act === "select"){
-          if(!(p.ownedSkins||[]).includes(id) && SKINS.find(x=>x.id===id)?.price>0){
-            return setMsg("אין לך את הסקין הזה");
-          }
-          setMsg("מעדכן סקין...", true);
-          p = await saveCurrentSkin(p, id);
-          setMsg("עודכן!", true);
-          render(p);
-        }
+
+        p = updated;
+        render(p);
       }catch(err){
-        setMsg(err.message || "נכשל");
+        setMsg(err.message || "Failed.");
+        render(p);
       }
     });
 
-    grid.appendChild(card);
+    row.appendChild(card);
   }
 }
 
-let profile = await loadProfile();
-if(!profile.ownedSkins?.includes("yossi_classic")) profile.ownedSkins = ["yossi_classic", ...(profile.ownedSkins||[])];
-render(profile);
+try{
+  let p = await loadProfile();
+  render(p);
+}catch(e){
+  setMsg(e.message || "Failed to load shop.");
+}
