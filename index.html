@@ -1,67 +1,62 @@
 <!doctype html>
-<html lang="he" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Yossi Boxi Web - Login</title>
+  <title>YOSSI BOXI - Login</title>
   <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
-<div class="wrap">
-  <div class="card" style="max-width:720px">
-    <div class="topbar">
-      <div class="pill">Yossi Boxi Web</div>
-      <div class="pill" style="border-color:rgba(249,115,22,.55)">התחברות</div>
-    </div>
+  <div class="wrap">
+    <div class="card" style="max-width:860px">
+      <div class="topbar">
+        <div class="brand">YOSSI BOXI</div>
+        <div class="pill" style="border-color:rgba(249,115,22,.35)">Sign in</div>
+      </div>
 
-    <div class="content">
-      <div class="grid2">
-        <div class="card" style="border-radius:14px">
-          <div class="content">
-            <div class="pill" style="width:max-content">התחברות</div>
-            <div style="height:10px"></div>
-            <input id="loginEmail" class="input" placeholder="אימייל" />
-            <div style="height:10px"></div>
-            <input id="loginPass" class="input" placeholder="סיסמה" type="password" />
-            <div style="height:12px"></div>
-            <button id="btnLogin" class="btn primary" style="width:100%">Login</button>
-            <div style="height:8px"></div>
-            <div id="loginMsg" class="small"></div>
+      <div class="content">
+        <div class="grid2">
+          <div class="card" style="border-radius:16px;background:rgba(0,0,0,.14)">
+            <div class="content">
+              <div class="pill" style="width:max-content">Sign in</div>
+              <div style="height:10px"></div>
+              <input id="loginEmail" class="input" placeholder="Email" />
+              <div style="height:10px"></div>
+              <input id="loginPass" class="input" placeholder="Password" type="password" />
+              <div style="height:12px"></div>
+              <button id="btnLogin" class="btn primary" style="width:100%">Login</button>
+              <div style="height:8px"></div>
+              <div id="loginMsg" class="small"></div>
+            </div>
+          </div>
+
+          <div class="card" style="border-radius:16px;background:rgba(0,0,0,.14)">
+            <div class="content">
+              <div class="pill" style="width:max-content">Create account</div>
+              <div style="height:10px"></div>
+              <input id="regUser" class="input" placeholder="Username (3-16, letters/numbers/_)" />
+              <div style="height:10px"></div>
+              <input id="regEmail" class="input" placeholder="Email" />
+              <div style="height:10px"></div>
+              <input id="regPass" class="input" placeholder="Password (min 8 chars)" type="password" />
+              <div style="height:12px"></div>
+              <button id="btnRegister" class="btn primary" style="width:100%">Register</button>
+              <div style="height:8px"></div>
+              <div id="regMsg" class="small"></div>
+            </div>
           </div>
         </div>
 
-        <div class="card" style="border-radius:14px">
-          <div class="content">
-            <div class="pill" style="width:max-content">הרשמה</div>
-            <div style="height:10px"></div>
-            <input id="regUser" class="input" placeholder="שם משתמש" />
-            <div style="height:10px"></div>
-            <input id="regEmail" class="input" placeholder="אימייל" />
-            <div style="height:10px"></div>
-            <input id="regPass" class="input" placeholder="סיסמה (לפחות 8 תווים)" type="password" />
-            <div style="height:12px"></div>
-            <button id="btnRegister" class="btn primary" style="width:100%">Register</button>
-            <div style="height:8px"></div>
-            <div id="regMsg" class="small"></div>
-          </div>
+        <div class="hr"></div>
+
+        <div class="row" style="justify-content:center">
+          <button id="btnGuest" class="btn ghost" style="width:min(420px,100%)">Continue as Guest</button>
         </div>
-      </div>
-
-      <div class="hr"></div>
-
-      <div class="row">
-        <div class="small">אורח = הכל נשמר מקומי, בלי פיירבייס</div>
-        <button id="btnGuest" class="btn">המשך כאורח</button>
-      </div>
-
-      <div class="small" style="margin-top:10px">
-        הערה: סיסמאות לא נשמרות במסד. רק Firebase Auth.
       </div>
     </div>
   </div>
-</div>
 
-<script src="js/firebase-config.js"></script>
-<script type="module" src="js/login.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script type="module" src="js/login.js"></script>
 </body>
 </html>
