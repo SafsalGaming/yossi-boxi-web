@@ -7,6 +7,13 @@
   <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
+  <div id="loader">
+    <div class="loaderBox">
+      <div class="spinner"></div>
+      <div class="pill">Loading...</div>
+    </div>
+  </div>
+
   <div class="wrap">
     <div class="card">
       <div class="topbar">
@@ -17,7 +24,7 @@
 
         <div class="row" style="gap:10px;flex-wrap:wrap;justify-content:flex-end">
           <div class="pill">User: <span id="uName">...</span></div>
-          <div class="pill">Coins: <span id="uCoins">0</span></div>
+          <div class="pill coins">Coins: <span id="uCoins" class="num coinsNum">0</span></div>
           <div class="pill">Equipped: <span id="uSkin">...</span></div>
         </div>
       </div>
