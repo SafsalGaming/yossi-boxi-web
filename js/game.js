@@ -77,10 +77,16 @@ function loadImg(src){
   i.src = src;
   i.loaded = false;
   i.failed = false;
-  i.onload = () => i.loaded = true;
-  i.onerror = () => i.failed = true;
+
+  i.onload = () => { i.loaded = true; };
+  i.onerror = () => {
+    i.failed = true;
+    console.error("[IMG FAIL]", src);
+  };
+
   return i;
 }
+
 function waitImg(img){
   return new Promise((resolve) => {
     if(!img) return resolve();
@@ -474,3 +480,4 @@ function loop(){
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
