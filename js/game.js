@@ -19,7 +19,6 @@ const loader = document.getElementById("loader");
 const ui = {
   score: document.getElementById("score"),
   coins: document.getElementById("coins"),
-  skinName: document.getElementById("skinName"),
   hearts: document.getElementById("hearts"),
   over: document.getElementById("over"),
   finalScore: document.getElementById("finalScore"),
@@ -71,28 +70,24 @@ function applyLayout(){
 applyLayout();
 addEventListener("resize", applyLayout);
 
-/* asset loader */
+/* assets */
+function isImgReady(img){
+  return !!img && img.complete && img.naturalWidth > 0;
+}
+
 function loadImg(src){
-  const i = new Image();
-  i.src = src;
-  i.loaded = false;
-  i.failed = false;
-
-  i.onload = () => { i.loaded = true; };
-  i.onerror = () => {
-    i.failed = true;
-    console.error("[IMG FAIL]", src);
-  };
-
-  return i;
+  const img = new Image();
+  img.src = src;
+  img.addEventListener("error", () => console.error("[IMG FAIL]", src), { once:true });
+  return img;
 }
 
 function waitImg(img){
   return new Promise((resolve) => {
     if(!img) return resolve();
-    if(img.complete && img.naturalWidth > 0) return resolve();
-    img.onload = () => resolve();
-    img.onerror = () => resolve();
+    if(isImgReady(img)) return resolve();
+    img.addEventListener("load", () => resolve(), { once:true });
+    img.addEventListener("error", () => resolve(), { once:true });
   });
 }
 
@@ -122,7 +117,6 @@ if(isGuest()){
 }
 
 let skin = loadSkin(skinId);
-ui.skinName.textContent = skin.name;
 
 /* hearts */
 let hp = 3;
@@ -391,12 +385,11 @@ function drawPlayer(){
   ctx.translate(player.x, 0);
   if(player.facing < 0) ctx.scale(-1, 1);
 
-  // No blue fallback. If image missing, draw nothing.
-  if(img && img.loaded && !img.failed){
+  if(isImgReady(img)){
     ctx.drawImage(img, -dw/2, player.baseY - dh, dw, dh);
   }
 
-  if(performance.now() < hurtUntil && img && img.loaded && !img.failed){
+  if(performance.now() < hurtUntil && isImgReady(img)){
     const prev = ctx.globalCompositeOperation;
     const prevA = ctx.globalAlpha;
     ctx.globalCompositeOperation = "source-atop";
@@ -419,9 +412,9 @@ function drawEnemies(){
     if(e.side < 0){
       ctx.translate(e.x, 0);
       ctx.scale(-1, 1);
-      if(img && img.loaded && !img.failed) ctx.drawImage(img, -dw/2, e.y - dh, dw, dh);
+      if(isImgReady(img)) ctx.drawImage(img, -dw/2, e.y - dh, dw, dh);
     }else{
-      if(img && img.loaded && !img.failed) ctx.drawImage(img, e.x - dw/2, e.y - dh, dw, dh);
+      if(isImgReady(img)) ctx.drawImage(img, e.x - dw/2, e.y - dh, dw, dh);
     }
     ctx.restore();
   }
@@ -480,4 +473,3 @@ function loop(){
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
-
