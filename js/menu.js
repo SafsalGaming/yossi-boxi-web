@@ -14,13 +14,23 @@ import {
 requireSessionOrGuest();
 
 const $ = (id) => document.getElementById(id);
+const loader = document.getElementById("loader");
+
+function hideLoader(){ loader?.remove(); }
+
+function waitImage(imgEl){
+  return new Promise((resolve) => {
+    if(!imgEl) return resolve();
+    if(imgEl.complete && imgEl.naturalWidth > 0) return resolve();
+    imgEl.onload = () => resolve();
+    imgEl.onerror = () => resolve();
+  });
+}
 
 function skinStandUrl(id){ return `assets/skins/${id}/stand.webp`; }
 
 async function loadProfile(){
-  if(isGuest()){
-    return getGuestProfile();
-  }
+  if(isGuest()) return getGuestProfile();
   const cached = getCachedProfile();
   if(cached) return cached;
   const p = await apiProfileGet();
@@ -54,8 +64,7 @@ async function applyPendingRun(p){
     clearPendingRun();
     return updated;
   }catch{
-    // keep pending (menu will try again next load)
-    return p;
+    return p; // keep pending, will retry next load
   }
 }
 
@@ -63,7 +72,10 @@ function render(p){
   $("uName").textContent = p.username || "Player";
   $("uCoins").textContent = p.coins ?? 0;
   $("uBest").textContent  = p.bestScore ?? 0;
-  $("skinImg").src = skinStandUrl(p.currentSkin || "yossi_classic");
+
+  const img = $("skinImg");
+  img.src = skinStandUrl(p.currentSkin || "yossi_classic");
+  return img;
 }
 
 $("btnLogout").addEventListener("click", async () => {
@@ -79,9 +91,12 @@ $("btnLb").addEventListener("click", () => location.href = "leaderboard.html");
 
 let p = await loadProfile();
 p = await applyPendingRun(p);
-render(p);
 
-// (optional) quick refresh for auth, so menu stays current without manual refresh
+const skinImgEl = render(p);
+await waitImage(skinImgEl);
+hideLoader();
+
+// silent refresh (no weird flashes)
 if(!isGuest()){
   try{
     const fresh = await apiProfileGet();
